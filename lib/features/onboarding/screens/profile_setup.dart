@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../home/home_screen.dart';
+
 import 'dart:convert'; // 🌟 This gives you the jsonEncode superpower!
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -8,6 +10,7 @@ class ProfileSetupScreen extends StatefulWidget {
 }
 
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
+
   int currentStep = 0;
   // 🌟 This is your master data object! Ready for your API.
   Map<String, dynamic> userProfile = {};
@@ -91,7 +94,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             const SizedBox(height: 32),
 
                             // ─────────── Dynamic Bottom Buttons ───────────
-                            if (currentStep == 10) ...[
+                            if  (currentStep ==  10)
+                              ...[
                               // 🌟 Step 11: Final Summary Screen (Stacked Buttons)
                               SizedBox(
                                 width: double.infinity,
@@ -105,9 +109,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                   ),
                                   child: ElevatedButton(
                                     onPressed: () {
-                                      // 🚀 Your API call goes here later!
+
+                                      // 🔹 Later this is where you call your AI backend
                                       print("Sending to API: $userProfile");
+
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const HomeScreen(),
+                                        ),
+                                      );
                                     },
+
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.transparent,
                                       shadowColor: Colors.transparent,
