@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
+import '../workout/screens/workout_plan_screen.dart';
 
 import 'widgets/stat_card.dart';
 import 'widgets/ai_assistant_card.dart';
@@ -86,7 +87,13 @@ class HomeScreen extends StatelessWidget {
                 buttonText: "Open Workout Plan",
                 buttonGradient: AppGradients.workout,
                 onPressed: () {
-                  // TODO: Navigate to Workout Screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const WorkoutPlanScreen(),
+                    ),
+                  );
+
                 },
               ),
 
