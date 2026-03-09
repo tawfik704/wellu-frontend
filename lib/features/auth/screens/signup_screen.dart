@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../onboarding/screens/profile_setup.dart';
-
+import '../screens/login_screen.dart';
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -24,14 +24,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-          body: jsonEncode({
-            "firstName": nameController.text.split(' ').first,
-            "lastName": nameController.text.contains(' ') ? nameController.text.split(' ').last : "User",
-            "email": emailController.text.trim(),
-            "password": passwordController.text,
-            "country": "Egypt",
-            "role": "User"
-          }),
+        body: jsonEncode({
+          "firstName": nameController.text.split(' ').first,
+          "lastName": nameController.text.contains(' ') ? nameController.text.split(' ').last : "User",
+          "email": emailController.text.trim(),
+          "password": passwordController.text,
+          "country": "Egypt",
+          "role": "User"
+        }),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -196,7 +196,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   children: [
                     const Text('Already have an account? '),
                     GestureDetector(
-                      onTap: () {},
+                      onTap: () {
+                        // Navigates to the SignInScreen when tapped 🚀
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SignInScreen()),
+                        );
+                      },
                       child: const Text(
                         'Log In',
                         style: TextStyle(color: Color(0xFF2979FF), fontWeight: FontWeight.w600),

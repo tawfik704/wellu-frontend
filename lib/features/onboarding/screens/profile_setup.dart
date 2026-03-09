@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../home/home_screen.dart';
-
 import 'dart:convert'; // 🌟 This gives you the jsonEncode superpower!
+ import '../../home/home_screen.dart'; // Make sure your path is correct!
+import '../screens/user_profile_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
 
@@ -10,13 +14,12 @@ class ProfileSetupScreen extends StatefulWidget {
 }
 
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
-
   int currentStep = 0;
-  // 🌟 This is your master data object! Ready for your API.
-  Map<String, dynamic> userProfile = {};
   static const int totalSteps = 11;
 
-  @override
+  // 🌟 Your brand new, strongly-typed Data Model!
+  final UserProfileModel userProfile = UserProfileModel();
+
   @override
   Widget build(BuildContext context) {
     final progress = (currentStep + 1) / totalSteps;
@@ -36,7 +39,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 40), // Made this smaller!
+              const SizedBox(height: 40),
 
               // ─────────── Progress Header ───────────
               Padding(
@@ -66,16 +69,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     value: progress,
                     minHeight: 6,
                     backgroundColor: Colors.white.withOpacity(0.3),
-                    valueColor:
-                    const AlwaysStoppedAnimation<Color>(Colors.white),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
               ),
 
               const SizedBox(height: 35),
-// ─────────── Card ───────────
+
+              // ─────────── Card ───────────
               Expanded(
-                child: Center( // 🌟 THIS is the magic widget! It stops the stretching.
+                child: Center(
                   child: SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -87,15 +90,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           borderRadius: BorderRadius.circular(60),
                         ),
                         child: Column(
-                          mainAxisSize: MainAxisSize.min, // 🌟 Hugs the content perfectly!
+                          mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _buildStepContent(),
                             const SizedBox(height: 32),
 
                             // ─────────── Dynamic Bottom Buttons ───────────
-                            if  (currentStep ==  10)
-                              ...[
+                            if (currentStep == 10) ...[
                               // 🌟 Step 11: Final Summary Screen (Stacked Buttons)
                               SizedBox(
                                 width: double.infinity,
@@ -108,11 +110,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     ),
                                   ),
                                   child: ElevatedButton(
-                                    onPressed: () {
+                                    onPressed: () async {
+                                      // 1. Wait for the profile to be sent to Rola's backend! ⏳
+                                      await submitProfile();
 
-                                      // 🔹 Later this is where you call your AI backend
-                                      print("Sending to API: $userProfile");
+                                      // 2. Safety check: make sure the screen is still visible
+                                      if (!context.mounted) return;
 
+                                      // 3. Blast off to the Home Screen! 🚀
                                       Navigator.pushReplacement(
                                         context,
                                         MaterialPageRoute(
@@ -120,7 +125,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                         ),
                                       );
                                     },
-
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.transparent,
                                       shadowColor: Colors.transparent,
@@ -145,7 +149,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                 height: 60,
                                 child: OutlinedButton(
                                   onPressed: () {
-                                    // Send them back to step 1 to edit
                                     setState(() => currentStep = 0);
                                   },
                                   style: OutlinedButton.styleFrom(
@@ -165,7 +168,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                 ),
                               ),
                             ] else if (currentStep == 4 || currentStep == 9) ...[
-                              // 🌟 Steps 5 & 10: Skip & Continue (Side-by-side Buttons)
+                              // 🌟 Steps 5 & 10: Skip & Continue
                               Row(
                                 children: [
                                   Expanded(
@@ -264,130 +267,169 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 10), // Replaced the giant 250 spacer
+              const SizedBox(height: 10),
             ],
           ),
         ),
       ),
     );
   }
-  Widget _buildStepContent() {
-    switch (currentStep) {
-      case 0:
-        return _GoalStep(onSelected: (val) => userProfile['goal'] = val);
-      case 1:
-        return _GenderStep(
-          onSelected: (val) => userProfile['gender'] = val,
-          onBack: () => setState(() => currentStep--),
+
+  // Logic: Send the complete profile to the backend!
+  Future<void> submitProfile() async {
+    // 1. Grab the saved VIP Pass (Token) 🎟️
+    final prefs = await SharedPreferences.getInstance();
+    final String? myToken = prefs.getString('auth_token');
+
+    if (myToken == null) {
+      print("❌ No token found! The user might not be logged in.");
+      // You could redirect them back to the login screen here!
+      return;
+    }
+
+    // 2. The Backend Endpoint
+    // ⚠️ Ask Rola what the exact path is! (I guessed /user/profile)
+    final url = Uri.parse("http://10.0.2.2:8081/user/profile");
+
+    try {
+      // 3. Post the data! 📦
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $myToken", // 🔐 Attaching your token!
+        },
+        body: jsonEncode(userProfile.toJson()), // 🪄 Your magical Model!
+      );
+
+      // 4. Check the server's response
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("✅ Profile successfully saved to the database!");
+
+        if (!mounted) return;
+
+        // 🚀 Blast off to the Home Screen!
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
-      case 2:
-        return _BodyStatsStep(onSaved: (val) => userProfile.addAll(val));
-      case 3:
-        return _MainGoalStep(onSaved: (val) => userProfile['mainGoals'] = val);
-      case 4:
-        return _PrecisionStep(onSaved: (val) => userProfile.addAll(val));
-      case 5:
-        return _FitnessLevelStep(onSaved: (val) => userProfile['fitnessLevel'] = val);
-      case 6:
-        return _TrainingPreferenceStep(onSaved: (val) => userProfile.addAll(val));
-      case 7:
-        return _WorkoutTimeStep(onSaved: (val) => userProfile['workoutTime'] = val);
-      case 8:
-        return _DietPreferenceStep(onSaved: (val) => userProfile['diet'] = val);
-      case 9:
-        return _InjuryStep(onSaved: (val) => userProfile['injuries'] = val);
-      case 10: // 🌟 Your brand new Summary Step!
-        return _SummaryStep(data: userProfile);
-      default:
-        return const Text('Next steps coming...');
+
+      } else {
+        print("❌ Server rejected the profile. Status: ${response.statusCode}");
+        print("Backend said: ${response.body}");
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to save profile: ${response.body}")),
+        );
+      }
+    } catch (e) {
+      print("💥 Connection error: $e");
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Connection failed. Check your network.")),
+      );
     }
   }
 
 
-
+  // 🌟 Updated to use your new Model!
+  Widget _buildStepContent() {
+    switch (currentStep) {
+      case 0:
+        return _GoalStep(onSelected: (val) => userProfile.goal = val);
+      case 1:
+        return _GenderStep(
+          onSelected: (val) => userProfile.gender = val,
+          onBack: () => setState(() => currentStep--),
+        );
+      case 2:
+        return _BodyStatsStep(onSaved: (val) {
+          userProfile.age = val['age'];
+          userProfile.height = val['height'];
+          userProfile.weight = val['weight'];
+        });
+      case 3:
+        return _MainGoalStep(onSaved: (val) => userProfile.mainGoals = val);
+      case 4:
+        return _PrecisionStep(onSaved: (val) {
+          userProfile.bodyType = val['bodyType'] as String?;
+          userProfile.bodyFat = val['bodyFat'] as double?;
+          userProfile.muscleMass = val['muscleMass'] as String?;
+        });
+      case 5:
+        return _FitnessLevelStep(onSaved: (val) => userProfile.fitnessLevel = val);
+      case 6:
+        return _TrainingPreferenceStep(onSaved: (val) {
+          userProfile.duration = val['duration'];
+          userProfile.intensity = val['intensity'];
+        });
+      case 7:
+        return _WorkoutTimeStep(onSaved: (val) => userProfile.workoutTime = val);
+      case 8:
+        return _DietPreferenceStep(onSaved: (val) => userProfile.diet = val);
+      case 9:
+        return _InjuryStep(onSaved: (val) => userProfile.injuries = val);
+      case 10:
+        return _SummaryStep(data: userProfile); // Pass the model down
+      default:
+        return const Text('Next steps coming...');
+    }
+  }
 
   void _nextStep() {
     if (currentStep < totalSteps - 1) {
       setState(() {
         currentStep++;
       });
-    } else {
-      // Finished → go to dashboard later
     }
   }
 }
+
+// ─────────── Step Widgets ───────────
+
 class _GoalStep extends StatefulWidget {
   final Function(String) onSelected;
-
   const _GoalStep({required this.onSelected});
-
   @override
   State<_GoalStep> createState() => _GoalStepState();
 }
 
 class _GoalStepState extends State<_GoalStep> {
-  String? selectedGoal;
-
-
-
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: [
-        const Icon(
-          Icons.track_changes,
-          size: 64,
-          color: Color(0xFF2979FF),
-        ),
-        const SizedBox(height: 16),
-        const Text(
+      children: const [
+        Icon(Icons.track_changes, size: 64, color: Color(0xFF2979FF)),
+        SizedBox(height: 16),
+        Text(
           "Let's build your WellU profile",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
-        const Text(
+        SizedBox(height: 8),
+        Text(
           'No forms. Just a few smart choices.',
           style: TextStyle(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 32),
-
-
-
+        SizedBox(height: 32),
       ],
     );
   }
-
-
-
-
-
-
 }
-
-
-
 
 class _GenderStep extends StatefulWidget {
   final Function(String) onSelected;
   final VoidCallback onBack;
-
-  const _GenderStep({
-    required this.onSelected,
-    required this.onBack,
-  });
-
+  const _GenderStep({required this.onSelected, required this.onBack});
   @override
   State<_GenderStep> createState() => _GenderStepState();
 }
 
 class _GenderStepState extends State<_GenderStep> {
   String? selectedGender;
-
   final genders = [
     {'label': 'Male', 'icon': Icons.person_outline},
     {'label': 'Female', 'icon': Icons.people_outline},
@@ -400,39 +442,26 @@ class _GenderStepState extends State<_GenderStep> {
       children: [
         const Text(
           'I identify as…',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
         ...genders.map((gender) {
           final isSelected = selectedGender == gender['label'];
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
               onTap: () {
-                setState(() {
-                  selectedGender = gender['label'] as String;
-                });
+                setState(() => selectedGender = gender['label'] as String);
                 widget.onSelected(gender['label'] as String);
               },
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 18,
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF2979FF)
-                        : Colors.grey.shade300,
+                    color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade300,
                     width: 1.5,
                   ),
                 ),
@@ -445,19 +474,14 @@ class _GenderStepState extends State<_GenderStep> {
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        gender['icon'] as IconData,
-                        color: Colors.grey.shade700,
-                      ),
+                      child: Icon(gender['icon'] as IconData, color: Colors.grey.shade700),
                     ),
                     const SizedBox(width: 16),
                     Text(
                       gender['label'] as String,
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -466,39 +490,26 @@ class _GenderStepState extends State<_GenderStep> {
             ),
           );
         }).toList(),
-
         const SizedBox(height: 16),
-
-        // ─────────── Back Button ───────────
         TextButton(
           onPressed: widget.onBack,
-          child: const Text(
-            'Back',
-            style: TextStyle(
-              decoration: TextDecoration.underline,
-            ),
-          ),
+          child: const Text('Back', style: TextStyle(decoration: TextDecoration.underline)),
         ),
       ],
     );
   }
 }
 
-
 class GradientThumbShape extends SliderComponentShape {
   final double thumbRadius;
-
   const GradientThumbShape({this.thumbRadius = 14.0});
 
   @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
-    return Size.fromRadius(thumbRadius);
-  }
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.fromRadius(thumbRadius);
 
   @override
   void paint(
-      PaintingContext context,
-      Offset center, {
+      PaintingContext context, Offset center, {
         required Animation<double> activationAnimation,
         required Animation<double> enableAnimation,
         required bool isDiscrete,
@@ -511,48 +522,24 @@ class GradientThumbShape extends SliderComponentShape {
         required Size sizeWithOverflow,
       }) {
     final Canvas canvas = context.canvas;
-
-    // 1. Draw the gradient background (the border)
     final Paint gradientPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [
-          Color(0xFF22E1A0),
-          Color(0xFF1E88E5),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: thumbRadius))
+      ..shader = const LinearGradient(colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)])
+          .createShader(Rect.fromCircle(center: center, radius: thumbRadius))
       ..style = PaintingStyle.fill;
-
-    // 2. Draw the white center
-    final Paint whitePaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    // Stamp the gradient circle first
+    final Paint whitePaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
     canvas.drawCircle(center, thumbRadius, gradientPaint);
-
-    // Stamp a slightly smaller white circle on top (leaving a 4px gradient border!)
     canvas.drawCircle(center, thumbRadius - 4, whitePaint);
   }
 }
 
-
-
-
-
-
-
-
 class _BodyStatsStep extends StatefulWidget {
   final Function(Map<String, double>) onSaved;
-
   const _BodyStatsStep({required this.onSaved});
-
   @override
   State<_BodyStatsStep> createState() => _BodyStatsStepState();
 }
 
 class _BodyStatsStepState extends State<_BodyStatsStep> {
-  // Starting default values based on your design
   double age = 25;
   double heightVal = 170;
   double weightVal = 70;
@@ -563,151 +550,75 @@ class _BodyStatsStepState extends State<_BodyStatsStep> {
       children: [
         const Text(
           'Tell us a bit about your body',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
-        // ─────────── Age Slider ───────────
         _buildCustomSlider(
-          label: 'Age',
-          value: age,
-          min: 18,
-          max: 65,
-          unit: '',
-          onChanged: (val) {
-            setState(() => age = val);
-            _saveData();
-          },
+          label: 'Age', value: age, min: 18, max: 65, unit: '',
+          onChanged: (val) { setState(() => age = val); _saveData(); },
         ),
-
         const SizedBox(height: 24),
-
-        // ─────────── Height Slider ───────────
         _buildCustomSlider(
-          label: 'Height',
-          value: heightVal,
-          min: 140,
-          max: 220,
-          unit: '',
-          onChanged: (val) {
-            setState(() => heightVal = val);
-            _saveData();
-          },
+          label: 'Height', value: heightVal, min: 140, max: 220, unit: '',
+          onChanged: (val) { setState(() => heightVal = val); _saveData(); },
         ),
-
         const SizedBox(height: 24),
-
-        // ─────────── Weight Slider ───────────
         _buildCustomSlider(
-          label: 'Weight',
-          value: weightVal,
-          min: 40,
-          max: 150,
-          unit: ' kg',
-          onChanged: (val) {
-            setState(() => weightVal = val);
-            _saveData();
-          },
+          label: 'Weight', value: weightVal, min: 40, max: 150, unit: ' kg',
+          onChanged: (val) { setState(() => weightVal = val); _saveData(); },
         ),
       ],
     );
   }
 
-  // Sends the data back up whenever a slider moves
   void _saveData() {
-    widget.onSaved({
-      'age': age,
-      'height': heightVal,
-      'weight': weightVal,
-    });
+    widget.onSaved({'age': age, 'height': heightVal, 'weight': weightVal});
   }
 
-  // ─────────── Reusable Slider Builder ───────────
   Widget _buildCustomSlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required String unit,
-    required ValueChanged<double> onChanged,
+    required String label, required double value, required double min,
+    required double max, required String unit, required ValueChanged<double> onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Top Row: Label & Value Pill
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.black87,
-              ),
-            ),
+            Text(label, style: const TextStyle(fontSize: 16, color: Colors.black87)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF22E1A0),
-                    Color(0xFF1E88E5),
-                  ],
-                ),
+                gradient: const LinearGradient(colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)]),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '${value.toInt()}$unit',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
-        // Middle Row: Custom Slider Track
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 8,
             activeTrackColor: const Color(0xFF22E1A0),
             inactiveTrackColor: Colors.grey.shade200,
-
-            // 🌟 Here is your new custom gradient thumb!
             thumbShape: const GradientThumbShape(thumbRadius: 14),
-
             overlayShape: SliderComponentShape.noOverlay,
             trackShape: const RoundedRectSliderTrackShape(),
           ),
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            onChanged: onChanged,
-          ),
+          child: Slider(value: value, min: min, max: max, onChanged: onChanged),
         ),
-        // Bottom Row: Min & Max Labels
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${min.toInt()}',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-              ),
-              Text(
-                '${max.toInt()}',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-              ),
+              Text('${min.toInt()}', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+              Text('${max.toInt()}', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
             ],
           ),
         ),
@@ -716,22 +627,15 @@ class _BodyStatsStepState extends State<_BodyStatsStep> {
   }
 }
 
-
-
-
 class _MainGoalStep extends StatefulWidget {
   final Function(List<String>) onSaved;
-
   const _MainGoalStep({required this.onSaved});
-
   @override
   State<_MainGoalStep> createState() => _MainGoalStepState();
 }
 
 class _MainGoalStepState extends State<_MainGoalStep> {
-  // We use a Set to easily handle multiple selections!
   Set<String> selectedGoals = {};
-
   final List<Map<String, dynamic>> goals = [
     {'label': 'Fat Loss', 'icon': Icons.local_fire_department_outlined},
     {'label': 'Muscle Gain', 'icon': Icons.fitness_center},
@@ -745,62 +649,40 @@ class _MainGoalStepState extends State<_MainGoalStep> {
       children: [
         const Text(
           "What's your main goal?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 8),
-
         const Text(
           'You can select a secondary goal too',
           style: TextStyle(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
-        // Generate the list of goal cards
         ...goals.map((goal) {
           final isSelected = selectedGoals.contains(goal['label']);
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
               onTap: () {
                 setState(() {
                   final label = goal['label'] as String;
-
                   if (selectedGoals.contains(label)) {
-                    // Deselect if already tapped
                     selectedGoals.remove(label);
                   } else {
-                    // Only allow up to 2 selections
-                    if (selectedGoals.length < 2) {
-                      selectedGoals.add(label);
-                    }
+                    if (selectedGoals.length < 2) selectedGoals.add(label);
                   }
                 });
-
-                // Send the list of selected goals back up
                 widget.onSaved(selectedGoals.toList());
               },
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 18,
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
                 decoration: BoxDecoration(
-                  // Give it a subtle blue tint when selected
                   color: isSelected ? const Color(0xFF2979FF).withOpacity(0.05) : Colors.transparent,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF2979FF)
-                        : Colors.grey.shade300,
+                    color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade300,
                     width: 1.5,
                   ),
                 ),
@@ -841,21 +723,16 @@ class _MainGoalStepState extends State<_MainGoalStep> {
 
 class _PrecisionStep extends StatefulWidget {
   final Function(Map<String, dynamic>) onSaved;
-
   const _PrecisionStep({required this.onSaved});
-
   @override
   State<_PrecisionStep> createState() => _PrecisionStepState();
 }
 
 class _PrecisionStepState extends State<_PrecisionStep> {
   String? selectedBodyType;
-
-  // 🌟 New state variables for the advanced section
   bool showAdvancedNumbers = false;
   double bodyFat = 20;
   String? selectedMuscleMass;
-
   final List<Map<String, dynamic>> bodyTypes = [
     {'label': 'Lean / Athletic', 'icon': Icons.monitor_heart_outlined},
     {'label': 'Average', 'icon': Icons.person_outline},
@@ -869,27 +746,18 @@ class _PrecisionStepState extends State<_PrecisionStep> {
       children: [
         const Text(
           "Want us to be more precise?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 8),
-
         const Text(
           'This helps us personalize better',
           style: TextStyle(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
-        // ─────────── Body Type Cards ───────────
         ...bodyTypes.map((type) {
           final isSelected = selectedBodyType == type['label'];
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
@@ -938,26 +806,15 @@ class _PrecisionStepState extends State<_PrecisionStep> {
             ),
           );
         }).toList(),
-
         const SizedBox(height: 8),
-
-        // ─────────── Advanced Toggle Button ───────────
         SizedBox(
           width: double.infinity,
           height: 60,
           child: OutlinedButton(
-            onPressed: () {
-              setState(() {
-                showAdvancedNumbers = !showAdvancedNumbers;
-              });
-            },
+            onPressed: () => setState(() => showAdvancedNumbers = !showAdvancedNumbers),
             style: OutlinedButton.styleFrom(
-              // Note: Native Flutter doesn't have dashed borders built-in.
-              // We're using a solid light-grey border here to keep it clean!
               side: BorderSide(color: Colors.grey.shade300, width: 1.5),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             ),
             child: Text(
               showAdvancedNumbers ? '- Hide' : '+ I know my numbers',
@@ -969,34 +826,17 @@ class _PrecisionStepState extends State<_PrecisionStep> {
             ),
           ),
         ),
-
-        // ─────────── Expanding Advanced Section ───────────
         if (showAdvancedNumbers) ...[
           const SizedBox(height: 32),
-
-          // Body Fat Slider
           _buildCustomSlider(
-            label: 'Body Fat %',
-            value: bodyFat,
-            min: 5,
-            max: 50,
-            unit: ' %',
-            onChanged: (val) {
-              setState(() => bodyFat = val);
-              _saveData();
-            },
+            label: 'Body Fat %', value: bodyFat, min: 5, max: 50, unit: ' %',
+            onChanged: (val) { setState(() => bodyFat = val); _saveData(); },
           ),
-
           const SizedBox(height: 24),
-
-          // Muscle Mass Row
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Muscle Mass',
-                style: TextStyle(fontSize: 16, color: Colors.black87),
-              ),
+              const Text('Muscle Mass', style: TextStyle(fontSize: 16, color: Colors.black87)),
               const SizedBox(height: 12),
               Row(
                 children: ['Low', 'Medium', 'High'].map((level) {
@@ -1004,15 +844,11 @@ class _PrecisionStepState extends State<_PrecisionStep> {
                   return Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(
-                        // Add spacing between buttons perfectly
                         right: level != 'High' ? 8.0 : 0,
                         left: level != 'Low' ? 8.0 : 0,
                       ),
                       child: GestureDetector(
-                        onTap: () {
-                          setState(() => selectedMuscleMass = level);
-                          _saveData();
-                        },
+                        onTap: () { setState(() => selectedMuscleMass = level); _saveData(); },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
@@ -1045,7 +881,6 @@ class _PrecisionStepState extends State<_PrecisionStep> {
     );
   }
 
-  // Sends the data back up whenever anything changes
   void _saveData() {
     widget.onSaved({
       'bodyType': selectedBodyType,
@@ -1054,15 +889,9 @@ class _PrecisionStepState extends State<_PrecisionStep> {
     });
   }
 
-  // ─────────── Reusable Slider Builder ───────────
-  // (Copied here so this step widget has everything it needs!)
   Widget _buildCustomSlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required String unit,
-    required ValueChanged<double> onChanged,
+    required String label, required double value, required double min,
+    required double max, required String unit, required ValueChanged<double> onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1070,24 +899,16 @@ class _PrecisionStepState extends State<_PrecisionStep> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: const TextStyle(fontSize: 16, color: Colors.black87),
-            ),
+            Text(label, style: const TextStyle(fontSize: 16, color: Colors.black87)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)],
-                ),
+                gradient: const LinearGradient(colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)]),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '${value.toInt()}$unit',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -1098,16 +919,11 @@ class _PrecisionStepState extends State<_PrecisionStep> {
             trackHeight: 8,
             activeTrackColor: const Color(0xFF22E1A0),
             inactiveTrackColor: Colors.grey.shade200,
-            thumbShape: const GradientThumbShape(thumbRadius: 14), // Uses your awesome custom thumb!
+            thumbShape: const GradientThumbShape(thumbRadius: 14),
             overlayShape: SliderComponentShape.noOverlay,
             trackShape: const RoundedRectSliderTrackShape(),
           ),
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            onChanged: onChanged,
-          ),
+          child: Slider(value: value, min: min, max: max, onChanged: onChanged),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1126,32 +942,17 @@ class _PrecisionStepState extends State<_PrecisionStep> {
 
 class _FitnessLevelStep extends StatefulWidget {
   final Function(String) onSaved;
-
   const _FitnessLevelStep({required this.onSaved});
-
   @override
   State<_FitnessLevelStep> createState() => _FitnessLevelStepState();
 }
 
 class _FitnessLevelStepState extends State<_FitnessLevelStep> {
   String? selectedLevel;
-
   final List<Map<String, dynamic>> levels = [
-    {
-      'title': 'Beginner',
-      'subtitle': 'New to fitness',
-      'icon': Icons.show_chart,
-    },
-    {
-      'title': 'Intermediate',
-      'subtitle': 'Regular workouts',
-      'icon': Icons.trending_up,
-    },
-    {
-      'title': 'Advanced',
-      'subtitle': 'Experienced athlete',
-      'icon': Icons.bolt_outlined,
-    },
+    {'title': 'Beginner', 'subtitle': 'New to fitness', 'icon': Icons.show_chart},
+    {'title': 'Intermediate', 'subtitle': 'Regular workouts', 'icon': Icons.trending_up},
+    {'title': 'Advanced', 'subtitle': 'Experienced athlete', 'icon': Icons.bolt_outlined},
   ];
 
   @override
@@ -1160,18 +961,12 @@ class _FitnessLevelStepState extends State<_FitnessLevelStep> {
       children: [
         const Text(
           "How would you describe your fitness level?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
         ...levels.map((level) {
           final isSelected = selectedLevel == level['title'];
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
@@ -1220,10 +1015,7 @@ class _FitnessLevelStepState extends State<_FitnessLevelStep> {
                         const SizedBox(height: 4),
                         Text(
                           level['subtitle'] as String,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade500,
-                          ),
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
                         ),
                       ],
                     ),
@@ -1238,12 +1030,9 @@ class _FitnessLevelStepState extends State<_FitnessLevelStep> {
   }
 }
 
-
 class _TrainingPreferenceStep extends StatefulWidget {
   final Function(Map<String, String>) onSaved;
-
   const _TrainingPreferenceStep({required this.onSaved});
-
   @override
   State<_TrainingPreferenceStep> createState() => _TrainingPreferenceStepState();
 }
@@ -1251,9 +1040,7 @@ class _TrainingPreferenceStep extends StatefulWidget {
 class _TrainingPreferenceStepState extends State<_TrainingPreferenceStep> {
   String? selectedDuration;
   String? selectedIntensity;
-
   final List<String> durations = ['30 minutes', '45 minutes', '60 minutes'];
-
   final List<Map<String, dynamic>> intensities = [
     {'label': 'Low intensity', 'icon': Icons.show_chart},
     {'label': 'High intensity', 'icon': Icons.local_fire_department_outlined},
@@ -1262,53 +1049,32 @@ class _TrainingPreferenceStepState extends State<_TrainingPreferenceStep> {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start, // Aligns subheaders to the left
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Center(
           child: Text(
             "How do you prefer to train?",
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
           ),
         ),
-
         const SizedBox(height: 32),
-
-        // ─────────── Duration Section ───────────
-        const Text(
-          'Duration',
-          style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500),
-        ),
+        const Text('Duration', style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
         const SizedBox(height: 12),
         ...durations.map((duration) => _buildOptionCard(
           label: duration,
           icon: Icons.access_time,
           isSelected: selectedDuration == duration,
-          onTap: () {
-            setState(() => selectedDuration = duration);
-            _saveData();
-          },
+          onTap: () { setState(() => selectedDuration = duration); _saveData(); },
         )).toList(),
-
         const SizedBox(height: 16),
-
-        // ─────────── Intensity Section ───────────
-        const Text(
-          'Intensity',
-          style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500),
-        ),
+        const Text('Intensity', style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
         const SizedBox(height: 12),
         ...intensities.map((intensity) => _buildOptionCard(
           label: intensity['label'] as String,
           icon: intensity['icon'] as IconData,
           isSelected: selectedIntensity == intensity['label'],
-          onTap: () {
-            setState(() => selectedIntensity = intensity['label'] as String);
-            _saveData();
-          },
+          onTap: () { setState(() => selectedIntensity = intensity['label'] as String); _saveData(); },
         )).toList(),
       ],
     );
@@ -1316,19 +1082,12 @@ class _TrainingPreferenceStepState extends State<_TrainingPreferenceStep> {
 
   void _saveData() {
     if (selectedDuration != null && selectedIntensity != null) {
-      widget.onSaved({
-        'duration': selectedDuration!,
-        'intensity': selectedIntensity!,
-      });
+      widget.onSaved({'duration': selectedDuration!, 'intensity': selectedIntensity!});
     }
   }
 
-  // Reusable card builder for this step to keep the code clean!
   Widget _buildOptionCard({
-    required String label,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
+    required String label, required IconData icon, required bool isSelected, required VoidCallback onTap,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1355,11 +1114,7 @@ class _TrainingPreferenceStepState extends State<_TrainingPreferenceStep> {
                   borderRadius: BorderRadius.circular(10),
                   border: isSelected ? Border.all(color: const Color(0xFF2979FF).withOpacity(0.3)) : null,
                 ),
-                child: Icon(
-                  icon,
-                  color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700,
-                  size: 20,
-                ),
+                child: Icon(icon, color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700, size: 20),
               ),
               const SizedBox(width: 16),
               Text(
@@ -1380,16 +1135,13 @@ class _TrainingPreferenceStepState extends State<_TrainingPreferenceStep> {
 
 class _WorkoutTimeStep extends StatefulWidget {
   final Function(String) onSaved;
-
   const _WorkoutTimeStep({required this.onSaved});
-
   @override
   State<_WorkoutTimeStep> createState() => _WorkoutTimeStepState();
 }
 
 class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
   String? selectedTime;
-
   final List<Map<String, dynamic>> times = [
     {'label': 'Morning', 'icon': Icons.wb_twilight},
     {'label': 'Afternoon', 'icon': Icons.light_mode_outlined},
@@ -1403,18 +1155,12 @@ class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
       children: [
         const Text(
           "When do you usually work out?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
         ...times.map((time) {
           final isSelected = selectedTime == time['label'];
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
@@ -1426,7 +1172,6 @@ class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 decoration: BoxDecoration(
-                  // Light teal background when selected
                   color: isSelected ? const Color(0xFF22E1A0).withOpacity(0.08) : Colors.transparent,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
@@ -1440,17 +1185,13 @@ class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        // Blue gradient background for the selected icon
                         gradient: isSelected
                             ? const LinearGradient(colors: [Color(0xFF2979FF), Color(0xFF1E88E5)])
                             : null,
                         color: isSelected ? null : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        time['icon'] as IconData,
-                        color: isSelected ? Colors.white : Colors.grey.shade700,
-                      ),
+                      child: Icon(time['icon'] as IconData, color: isSelected ? Colors.white : Colors.grey.shade700),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -1461,13 +1202,8 @@ class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
                         color: isSelected ? const Color(0xFF22E1A0) : Colors.black87,
                       ),
                     ),
-                    const Spacer(), // Pushes the checkmark to the far right
-                    if (isSelected)
-                      const Icon(
-                        Icons.check_circle,
-                        color: Color(0xFF22E1A0),
-                        size: 24,
-                      ),
+                    const Spacer(),
+                    if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF22E1A0), size: 24),
                   ],
                 ),
               ),
@@ -1481,21 +1217,18 @@ class _WorkoutTimeStepState extends State<_WorkoutTimeStep> {
 
 class _DietPreferenceStep extends StatefulWidget {
   final Function(String) onSaved;
-
   const _DietPreferenceStep({required this.onSaved});
-
   @override
   State<_DietPreferenceStep> createState() => _DietPreferenceStepState();
 }
 
 class _DietPreferenceStepState extends State<_DietPreferenceStep> {
   String? selectedDiet;
-
   final List<Map<String, dynamic>> diets = [
     {'label': 'Omnivore', 'icon': Icons.restaurant},
-    {'label': 'Vegetarian', 'icon': Icons.soup_kitchen_outlined}, // Bowl icon
+    {'label': 'Vegetarian', 'icon': Icons.soup_kitchen_outlined},
     {'label': 'Vegan', 'icon': Icons.eco_outlined},
-    {'label': 'Mediterranean', 'icon': Icons.set_meal_outlined}, // Fish icon
+    {'label': 'Mediterranean', 'icon': Icons.set_meal_outlined},
     {'label': 'Lactose-Free', 'icon': Icons.water_drop_outlined},
   ];
 
@@ -1505,18 +1238,12 @@ class _DietPreferenceStepState extends State<_DietPreferenceStep> {
       children: [
         const Text(
           "How do you usually eat?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
         ...diets.map((diet) {
           final isSelected = selectedDiet == diet['label'];
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
@@ -1545,10 +1272,7 @@ class _DietPreferenceStepState extends State<_DietPreferenceStep> {
                         borderRadius: BorderRadius.circular(12),
                         border: isSelected ? Border.all(color: const Color(0xFF2979FF).withOpacity(0.3)) : null,
                       ),
-                      child: Icon(
-                        diet['icon'] as IconData,
-                        color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700,
-                      ),
+                      child: Icon(diet['icon'] as IconData, color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -1569,19 +1293,16 @@ class _DietPreferenceStepState extends State<_DietPreferenceStep> {
     );
   }
 }
+
 class _InjuryStep extends StatefulWidget {
   final Function(List<String>) onSaved;
-
   const _InjuryStep({required this.onSaved});
-
   @override
   State<_InjuryStep> createState() => _InjuryStepState();
 }
 
 class _InjuryStepState extends State<_InjuryStep> {
-  // Using a Set to allow multiple selections easily!
   Set<String> selectedAreas = {};
-
   final List<String> areas = ['Knee', 'Shoulder', 'Lower Back'];
 
   @override
@@ -1590,26 +1311,18 @@ class _InjuryStepState extends State<_InjuryStep> {
       children: [
         const Text(
           "Anything we should be careful with?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 8),
-
         const Text(
           'Select any areas of concern',
           style: TextStyle(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
         ...areas.map((area) {
           final isSelected = selectedAreas.contains(area);
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: GestureDetector(
@@ -1644,10 +1357,7 @@ class _InjuryStepState extends State<_InjuryStep> {
                         borderRadius: BorderRadius.circular(12),
                         border: isSelected ? Border.all(color: const Color(0xFF2979FF).withOpacity(0.3)) : null,
                       ),
-                      child: Icon(
-                        Icons.error_outline, // The little exclamation mark icon
-                        color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700,
-                      ),
+                      child: Icon(Icons.error_outline, color: isSelected ? const Color(0xFF2979FF) : Colors.grey.shade700),
                     ),
                     const SizedBox(width: 16),
                     Text(
@@ -1669,111 +1379,80 @@ class _InjuryStepState extends State<_InjuryStep> {
   }
 }
 
+// 🌟 Updated to read from your new Model!
 class _SummaryStep extends StatelessWidget {
-  final Map<String, dynamic> data;
-
+  final UserProfileModel data;
   const _SummaryStep({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    // Safely extracting the data with fallbacks so the app never crashes!
-    final age = data['age']?.toInt() ?? 25;
-    final height = data['height']?.toInt() ?? 170;
-    final weight = data['weight']?.toInt() ?? 70;
-    final gender = (data['gender'] ?? 'Not specified').toString().toLowerCase();
+    final age = data.age?.toInt() ?? 25;
+    final height = data.height?.toInt() ?? 170;
+    final weight = data.weight?.toInt() ?? 70;
+    final gender = (data.gender ?? 'Not specified').toLowerCase();
 
-    // Formatting lists (like goals) into strings
-    final rawGoals = data['mainGoals'] as List<String>? ?? ['Health'];
-    final goalsStr = rawGoals.join(' & ').toLowerCase();
-    final level = (data['fitnessLevel'] ?? 'beginner').toString().toLowerCase();
+    final goalsStr = (data.mainGoals ?? ['Health']).join(' & ').toLowerCase();
+    final level = (data.fitnessLevel ?? 'beginner').toLowerCase();
 
-    final duration = data['duration'] ?? '60 minutes';
-    final intensity = (data['intensity'] ?? 'low intensity').toString().toLowerCase();
-    final time = (data['workoutTime'] ?? 'morning').toString().toLowerCase();
+    final duration = data.duration ?? '60 minutes';
+    final intensity = (data.intensity ?? 'low intensity').toLowerCase();
+    final time = (data.workoutTime ?? 'morning').toLowerCase();
 
-    final diet = (data['diet'] ?? 'Not specified').toString().toLowerCase();
+    final diet = (data.diet ?? 'Not specified').toLowerCase();
 
     return Column(
       children: [
-        // ─────────── Top Sparkle Icon ───────────
         Container(
           width: 60,
           height: 60,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)],
-            ),
+            gradient: LinearGradient(colors: [Color(0xFF22E1A0), Color(0xFF1E88E5)]),
           ),
           child: const Icon(Icons.auto_awesome, color: Colors.white, size: 32),
         ),
-
         const SizedBox(height: 16),
-
         const Text(
           "Here's your WellU profile",
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 8),
-
         const Text(
           'Review your personalized settings',
           style: TextStyle(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
-
         const SizedBox(height: 32),
-
-        // ─────────── Summary Cards ───────────
-        _buildSummaryCard(
-          title: 'Body Basics',
-          content: '$age years • $height cm • $weight kg • $gender',
-        ),
-        _buildSummaryCard(
-          title: 'Fitness',
-          content: 'Goal: $goalsStr • Level: $level',
-        ),
-        _buildSummaryCard(
-          title: 'Workout Preferences',
-          content: '${duration.replaceAll(' minutes', ' min')} • $intensity • $time',
-        ),
-        _buildSummaryCard(
-          title: 'Nutrition',
-          content: diet,
-        ),
+        _buildSummaryCard(title: 'Body Basics', content: '$age years • $height cm • $weight kg • $gender'),
+        _buildSummaryCard(title: 'Fitness', content: 'Goal: $goalsStr • Level: $level'),
+        _buildSummaryCard(title: 'Workout Preferences', content: '${duration.replaceAll(' minutes', ' min')} • $intensity • $time'),
+        _buildSummaryCard(title: 'Nutrition', content: diet),
       ],
     );
   }
 
-  // Helper widget to keep the card design consistent
   Widget _buildSummaryCard({required String title, required String content}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50, // Very light grey background
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
           const SizedBox(height: 4),
-          Text(
-            content,
-            style: const TextStyle(fontSize: 16, color: Colors.black87),
-          ),
+          Text(content, style: const TextStyle(fontSize: 16, color: Colors.black87)),
         ],
       ),
     );
   }
 }
 
-
-
+// ─────────── The Data Model ───────────
+// 🌟 I added this right to the bottom so it works instantly!
+// You can cut this out and put it in a separate `user_profile_model.dart` file later!
